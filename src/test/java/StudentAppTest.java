@@ -1,42 +1,38 @@
 import com.github.javafaker.Faker;
-import constants.AllConstants;
-import org.openqa.selenium.By;
-import org.openqa.selenium.JavascriptExecutor;
-import org.openqa.selenium.WebDriver;
-import org.openqa.selenium.WebElement;
-import org.openqa.selenium.chrome.ChromeDriver;
-import org.openqa.selenium.chrome.ChromeOptions;
 import org.openqa.selenium.support.ui.ExpectedConditions;
 import org.openqa.selenium.support.ui.WebDriverWait;
-import org.testng.Assert;
 import org.testng.ITestResult;
-import org.testng.annotations.*;
+import org.testng.annotations.AfterMethod;
+import org.testng.annotations.BeforeMethod;
+import org.testng.annotations.Test;
 import page_objects.AddStudentPage;
 import page_objects.AllStudentsPage;
 import page_objects.Notifications;
-import utils.ConfigHelper;
-import utils.DriverManager;
 
+import java.lang.reflect.Method;
 import java.time.Duration;
 
 import static constants.AllConstants.GenderConstants.MALE;
+import static constants.AllConstants.Messages.STUDENT_SUCCESSFULLY_ADDED;
+import static constants.AllConstants.Messages.WAS_ADDED_TO_THE_SYSTEM;
 import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertTrue;
 import static utils.ConfigHelper.getConfig;
+import static utils.DriverManager.*;
 
 public class StudentAppTest {
+    private WebDriverWait driverWait;
+    private AllStudentsPage allStudentsPage;
+    private AddStudentPage addStudentPage;
+    private Notifications notifications;
 
-    WebDriver driver = DriverManager.getInstance();
-    WebDriverWait driverWait;
-    Faker dataFaker = new Faker();
-    AllStudentsPage allStudentsPage;
-    AddStudentPage addStudentPage;
-    Notifications notifications;
+    private final Faker dataFaker = new Faker();
 
-    @BeforeMethod
-    public void initialize() {
-        driverWait = new WebDriverWait(driver, Duration.ofSeconds(10));
-        driver.get(getConfig().getString("student.app.hostname"));
+    @BeforeMethod(alwaysRun = true)
+    public void initialize(Method method) {
+        testName = (method.getName());
+        driverWait = new WebDriverWait(getInstance(), Duration.ofSeconds(10));
+        getInstance().get(getConfig().getString("student.app.hostname"));
         allStudentsPage = new AllStudentsPage();
         addStudentPage = new AddStudentPage();
         notifications = new Notifications();
@@ -44,25 +40,30 @@ public class StudentAppTest {
 
     @AfterMethod(alwaysRun = true)
     public void tearDown(ITestResult result) {
-        String status = result.isSuccess() ? "passed" : "failed";
-        ((JavascriptExecutor)driver).executeScript("sauce:job-result=" + status);
-        driver.close();
-        driver.quit();
+        if (!getConfig().getBoolean("student.app.run.locally")) markRemoteTest(result);
+        closeDriver();
     }
 
     @Test(description = "Add student and check successful message")
     public void openStudentApp() {
         allStudentsPage.waitAndClickOnAddStudentButton();
-        String name = dataFaker.funnyName().name();
-                addStudentPage.waitAndSetValueForNameField(name);
-        addStudentPage.waitAndSetValueForEmailField();
+
+        String name = dataFaker.name().firstName();
+        String email = dataFaker.internet().emailAddress();
+        addStudentPage.waitAndSetValueForNameField(name);
+        addStudentPage.waitAndSetValueForEmailField(email);
         addStudentPage.waitAndSetGender(MALE);
         addStudentPage.clickOnSubmitButton();
 
-        assertEquals(notifications.getMessageFromNotification(), "Student successfully added");
-        assertEquals(notifications.getDescriptionFromNotification(), name + " was added to the system");
+        assertEquals(notifications.getMessageFromNotification(), STUDENT_SUCCESSFULLY_ADDED);
+        assertEquals(notifications.getDescriptionFromNotification(), String.format(WAS_ADDED_TO_THE_SYSTEM, name));
 
         notifications.getPopUpCloseButton().click();
         assertTrue(driverWait.until(ExpectedConditions.invisibilityOf(notifications.getPopUpCloseButton())));
+    }
+
+    @Test()
+    public void checkTitle() {
+        assertEquals(getInstance().getTitle(), "acodemy - React App");
     }
 }
